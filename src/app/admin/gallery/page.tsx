@@ -16,6 +16,13 @@ import {
 } from 'lucide-react';
 import MediaModal from '@/components/MediaModal';
 import { GalleryItem, MediaType, DepartmentEvent } from '@/lib/types';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 const CATEGORIES = [
   'Hackathons',
@@ -26,6 +33,29 @@ const CATEGORIES = [
   'Sports',
   'Guest Lectures',
 ];
+
+// Supabase Storage upload helper function for Gallery Media
+async function uploadGalleryMediaToSupabase(file: File) {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+  const filePath = `gallery-media/${fileName}`;
+
+  // Upload file to Supabase Storage bucket ('website-uploads')
+  const { data, error } = await supabase.storage
+    .from('website-uploads')
+    .upload(filePath, file);
+
+  if (error) {
+    throw new Error('Error uploading media: ' + error.message);
+  }
+
+  // Get the public URL of the uploaded file
+  const { data: publicUrlData } = supabase.storage
+    .from('website-uploads')
+    .getPublicUrl(filePath);
+
+  return publicUrlData.publicUrl;
+}
 
 export default function AdminGalleryPage() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
@@ -73,23 +103,12 @@ export default function AdminGalleryPage() {
     if (!file) return;
 
     setUploadingFile(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.success) {
-        setUrl(data.url);
-      } else {
-        alert(data.message || 'File upload failed');
-      }
-    } catch (err) {
-      alert('Error uploading file');
+      const publicUrl = await uploadGalleryMediaToSupabase(file);
+      setUrl(publicUrl);
+      alert('Gallery image uploaded successfully to Supabase!');
+    } catch (err: any) {
+      alert(err.message || 'Error uploading file');
     } finally {
       setUploadingFile(false);
     }
@@ -471,7 +490,8 @@ export default function AdminGalleryPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-blue-glow"
+                  disabled={uploadingFile}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-blue-glow disabled:opacity-50"
                 >
                   Save to Gallery
                 </button>
