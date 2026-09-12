@@ -7,18 +7,13 @@ import {
   Plus, 
   Trash2, 
   Upload, 
-  Link as LinkIcon, 
   X, 
-  Check, 
-  Sparkles, 
-  Filter,
   Eye
 } from 'lucide-react';
 import MediaModal from '@/components/MediaModal';
 import { GalleryItem, MediaType, DepartmentEvent } from '@/lib/types';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -34,29 +29,6 @@ const CATEGORIES = [
   'Guest Lectures',
 ];
 
-// Supabase Storage upload helper function for Gallery Media
-async function uploadGalleryMediaToSupabase(file: File) {
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-  const filePath = `gallery-media/${fileName}`;
-
-  // Upload file to Supabase Storage bucket ('website-uploads')
-  const { data, error } = await supabase.storage
-    .from('website-uploads')
-    .upload(filePath, file);
-
-  if (error) {
-    throw new Error('Error uploading media: ' + error.message);
-  }
-
-  // Get the public URL of the uploaded file
-  const { data: publicUrlData } = supabase.storage
-    .from('website-uploads')
-    .getPublicUrl(filePath);
-
-  return publicUrlData.publicUrl;
-}
-
 export default function AdminGalleryPage() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [events, setEvents] = useState<DepartmentEvent[]>([]);
@@ -66,7 +38,6 @@ export default function AdminGalleryPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPreviewMedia, setSelectedPreviewMedia] = useState<GalleryItem | null>(null);
 
-  // Form states
   const [mediaType, setMediaType] = useState<MediaType>('image');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -79,14 +50,32 @@ export default function AdminGalleryPage() {
 
   const loadData = async () => {
     try {
-      const [galRes, evRes] = await Promise.all([
-        fetch('/api/gallery'),
-        fetch('/api/events'),
-      ]);
-      const galData = await galRes.json();
-      const evData = await evRes.json();
-      if (galData.success) setGallery(galData.gallery || []);
-      if (evData.success) setEvents(evData.events || []);
+      const { data: galData, error: galError } = await supabase
+        .from('gallery')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const { data: evData } = await supabase
+        .from('events')
+        .select('*');
+
+      if (galError) console.error(galError);
+
+      const formattedGallery: GalleryItem[] = (galData || []).map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        type: item.media_type || item.type || 'image',
+        category: item.category || 'Hackathons',
+        eventId: item.associated_event || item.event_id,
+        url: item.media_url || item.url,
+        thumbnailUrl: item.thumbnail_url || item.thumbnailUrl,
+        description: item.description,
+        featured: item.featured,
+        date: new Date(item.created_at || Date.now()).toISOString().split('T')[0],
+      }));
+
+      setGallery(formattedGallery);
+      setEvents(evData || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -104,11 +93,24 @@ export default function AdminGalleryPage() {
 
     setUploadingFile(true);
     try {
-      const publicUrl = await uploadGalleryMediaToSupabase(file);
-      setUrl(publicUrl);
-      alert('Gallery image uploaded successfully to Supabase!');
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+      const filePath = `gallery-media/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('website-uploads')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('website-uploads')
+        .getPublicUrl(filePath);
+
+      setUrl(publicUrlData.publicUrl);
+      alert('File uploaded successfully!');
     } catch (err: any) {
-      alert(err.message || 'Error uploading file');
+      alert('File upload failed: ' + err.message);
     } finally {
       setUploadingFile(false);
     }
@@ -122,55 +124,42 @@ export default function AdminGalleryPage() {
     }
 
     try {
-      const res = await fetch('/api/gallery', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
+      const { error } = await supabase.from('gallery').insert([
+        {
           title,
-          description,
-          type: mediaType,
-          url,
-          thumbnailUrl: mediaType === 'video' ? thumbnailUrl : undefined,
+          media_type: mediaType,
           category,
-          eventId: selectedEventId || undefined,
+          associated_event: selectedEventId || null,
+          media_url: url,
+          thumbnail_url: mediaType === 'video' ? thumbnailUrl : null,
+          description,
           featured,
-        }),
-      });
+          created_at: new Date().toISOString(),
+        },
+      ]);
 
-      const data = await res.json();
-      if (data.success) {
-        setIsModalOpen(false);
-        // Reset form
-        setTitle('');
-        setDescription('');
-        setUrl('');
-        setThumbnailUrl('');
-        setFeatured(false);
-        loadData();
-      } else {
-        alert(data.message || 'Error saving media');
-      }
-    } catch (err) {
-      alert('Failed to save media item');
+      if (error) throw error;
+
+      setIsModalOpen(false);
+      setTitle('');
+      setDescription('');
+      setUrl('');
+      setThumbnailUrl('');
+      setFeatured(false);
+      loadData();
+    } catch (err: any) {
+      alert('Failed to save media item: ' + err.message);
     }
   };
 
   const handleDelete = async (id: string, title: string) => {
     if (!confirm(`Remove "${title}" from the department gallery?`)) return;
     try {
-      const res = await fetch(`/api/gallery?id=${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (data.success) {
-        loadData();
-      } else {
-        alert(data.message || 'Error deleting media');
-      }
-    } catch (err) {
-      alert('Failed to delete media');
+      const { error } = await supabase.from('gallery').delete().eq('id', id);
+      if (error) throw error;
+      loadData();
+    } catch (err: any) {
+      alert('Failed to delete media: ' + err.message);
     }
   };
 
@@ -181,8 +170,6 @@ export default function AdminGalleryPage() {
 
   return (
     <div className="space-y-6">
-      
-      {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white">Media Gallery Hub</h1>
@@ -193,21 +180,18 @@ export default function AdminGalleryPage() {
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-blue-glow transition-all shrink-0"
+          className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-all shrink-0"
         >
           <Plus className="w-4 h-4" />
           <span>Add Photo or Video</span>
         </button>
       </div>
 
-      {/* Filter Tabs */}
       <div className="flex items-center space-x-2 p-2 rounded-2xl bg-slate-900/80 border border-blue-900/40 w-fit">
         <button
           onClick={() => setFilterType('all')}
           className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-            filterType === 'all'
-              ? 'bg-blue-600 text-white shadow-blue-glow'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            filterType === 'all' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
           All Media ({gallery.length})
@@ -215,9 +199,7 @@ export default function AdminGalleryPage() {
         <button
           onClick={() => setFilterType('image')}
           className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-            filterType === 'image'
-              ? 'bg-blue-600 text-white shadow-blue-glow'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            filterType === 'image' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
           Photos ({gallery.filter((g) => g.type === 'image').length})
@@ -225,25 +207,19 @@ export default function AdminGalleryPage() {
         <button
           onClick={() => setFilterType('video')}
           className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-            filterType === 'video'
-              ? 'bg-red-600 text-white shadow-lg'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            filterType === 'video' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
           Videos ({gallery.filter((g) => g.type === 'video').length})
         </button>
       </div>
 
-      {/* Media Grid */}
       {loading ? (
         <div className="py-16 text-center text-slate-400">Loading media...</div>
       ) : filteredGallery.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
           {filteredGallery.map((item) => (
-            <div
-              key={item.id}
-              className="rounded-2xl bg-slate-900/80 border border-blue-900/40 overflow-hidden shadow-lg flex flex-col group"
-            >
+            <div key={item.id} className="rounded-2xl bg-slate-900/80 border border-blue-900/40 overflow-hidden shadow-lg flex flex-col group">
               <div className="relative h-44 w-full bg-slate-950 overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -252,7 +228,6 @@ export default function AdminGalleryPage() {
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
-
                 <div className="absolute top-2.5 left-2.5 flex items-center space-x-1.5">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                     item.type === 'video' ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
@@ -288,9 +263,6 @@ export default function AdminGalleryPage() {
                 <div>
                   <span className="text-[10px] font-bold uppercase text-blue-400">{item.category}</span>
                   <h4 className="font-bold text-white line-clamp-1 mt-0.5">{item.title}</h4>
-                  {item.eventName && (
-                    <p className="text-[11px] text-cyan-400 truncate mt-0.5">Linked: {item.eventName}</p>
-                  )}
                 </div>
                 <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
                   <span>{item.date}</span>
@@ -305,7 +277,6 @@ export default function AdminGalleryPage() {
         </div>
       )}
 
-      {/* Add Media Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
           <div className="relative z-10 max-w-xl w-full bg-slate-900 border border-blue-500/30 rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto my-auto">
@@ -320,8 +291,6 @@ export default function AdminGalleryPage() {
             </div>
 
             <form onSubmit={handleSaveMedia} className="space-y-4 text-xs">
-              
-              {/* Type Switcher */}
               <div className="space-y-1">
                 <label className="text-slate-300 font-semibold">Media Type *</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -329,22 +298,17 @@ export default function AdminGalleryPage() {
                     type="button"
                     onClick={() => setMediaType('image')}
                     className={`flex items-center justify-center space-x-2 py-2.5 rounded-xl font-bold transition-all ${
-                      mediaType === 'image'
-                        ? 'bg-blue-600 text-white shadow-blue-glow'
-                        : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      mediaType === 'image' ? 'bg-blue-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'
                     }`}
                   >
                     <ImageIcon className="w-4 h-4" />
                     <span>Photo / Image</span>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => setMediaType('video')}
                     className={`flex items-center justify-center space-x-2 py-2.5 rounded-xl font-bold transition-all ${
-                      mediaType === 'video'
-                        ? 'bg-red-600 text-white shadow-lg'
-                        : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      mediaType === 'video' ? 'bg-red-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'
                     }`}
                   >
                     <PlayCircle className="w-4 h-4" />
@@ -353,13 +317,12 @@ export default function AdminGalleryPage() {
                 </div>
               </div>
 
-              {/* Title & Category */}
               <div className="space-y-1">
                 <label className="text-slate-300 font-semibold">Title / Caption *</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. ByteCraft Hackathon Midnight Coding Session"
+                  placeholder="e.g. Hackathon Coding Session"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:border-blue-500 outline-none"
@@ -395,11 +358,9 @@ export default function AdminGalleryPage() {
                 </div>
               </div>
 
-              {/* Source URL or Upload */}
               {mediaType === 'image' ? (
                 <div className="space-y-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800">
                   <label className="text-slate-300 font-semibold block">Photo File or Direct Image URL *</label>
-                  
                   <div className="flex items-center space-x-3">
                     <label className="cursor-pointer flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 transition-colors font-medium text-xs shrink-0">
                       <Upload className="w-4 h-4" />
@@ -417,17 +378,11 @@ export default function AdminGalleryPage() {
 
                   <input
                     type="url"
-                    placeholder="https://images.unsplash.com/... or /uploads/..."
+                    placeholder="https://..."
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     className="w-full p-2 bg-slate-900 border border-slate-800 rounded-lg text-white text-xs focus:border-blue-500 outline-none"
                   />
-                  {url && (
-                    <div className="h-20 w-32 rounded-lg overflow-hidden border border-slate-700 bg-slate-900">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={url} alt="Preview" className="w-full h-full object-cover" />
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div className="space-y-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800">
@@ -436,20 +391,9 @@ export default function AdminGalleryPage() {
                     <input
                       type="url"
                       required
-                      placeholder="https://www.youtube.com/watch?v=... or .mp4"
+                      placeholder="https://www.youtube.com/watch?v=..."
                       value={url}
                       onChange={(e) => setUrl(e.target.value)}
-                      className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-xs focus:border-blue-500 outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-slate-300 font-semibold">Custom Video Poster Thumbnail URL</label>
-                    <input
-                      type="url"
-                      placeholder="https://images.unsplash.com/..."
-                      value={thumbnailUrl}
-                      onChange={(e) => setThumbnailUrl(e.target.value)}
                       className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-xs focus:border-blue-500 outline-none"
                     />
                   </div>
@@ -457,10 +401,9 @@ export default function AdminGalleryPage() {
               )}
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-semibold">Description / Notes (Optional)</label>
+                <label className="text-slate-300 font-semibold">Description (Optional)</label>
                 <textarea
                   rows={2}
-                  placeholder="Additional context about this photograph or footage..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:border-blue-500 outline-none"
@@ -473,7 +416,7 @@ export default function AdminGalleryPage() {
                   id="featured-check"
                   checked={featured}
                   onChange={(e) => setFeatured(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-blue-500"
+                  className="rounded border-slate-700 bg-slate-950 text-blue-600"
                 />
                 <label htmlFor="featured-check" className="text-slate-300 text-xs cursor-pointer">
                   Feature this on the department homepage showcase
@@ -491,23 +434,17 @@ export default function AdminGalleryPage() {
                 <button
                   type="submit"
                   disabled={uploadingFile}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-blue-glow disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold disabled:opacity-50"
                 >
                   Save to Gallery
                 </button>
               </div>
-
             </form>
           </div>
         </div>
       )}
 
-      {/* Lightbox Preview */}
-      <MediaModal
-        item={selectedPreviewMedia}
-        onClose={() => setSelectedPreviewMedia(null)}
-      />
-
+      <MediaModal item={selectedPreviewMedia} onClose={() => setSelectedPreviewMedia(null)} />
     </div>
   );
 }
