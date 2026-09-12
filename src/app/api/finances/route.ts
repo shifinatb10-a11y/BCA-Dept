@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { createClient } from '@supabase/supabase-js';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 function checkAuth(request: Request): boolean {
   const cookieHeader = request.headers.get('cookie') || '';
@@ -12,14 +16,11 @@ function checkAuth(request: Request): boolean {
 
 export async function GET(request: Request) {
   try {
-    const querySnapshot = await getDocs(collection(db, 'finances'));
-    const transactions = querySnapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
-    }));
+    const { data, error } = await supabase.from('finances').select('*');
+    if (error) throw error;
 
-    // Sort by date descending
-    transactions.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    let transactions = data || [];
+    transactions.sort((a: any, b: any) => new Date(b.date || b.transaction_date).getTime() - new Date(a.date || a.transaction_date).getTime());
 
     return NextResponse.json({ success: true, transactions });
   } catch (error: any) {
@@ -37,20 +38,21 @@ export async function POST(request: Request) {
 
     const newTransaction = {
       title: body.title,
-      type: body.type || 'income', // 'income' or 'expense'
+      transaction_type: body.type || 'income',
       amount: Number(body.amount) || 0,
-      date: body.date || new Date().toISOString().split('T')[0],
+      transaction_date: body.date || new Date().toISOString().split('T')[0],
       category: body.category || 'Event Registration',
-      paymentMethod: body.paymentMethod || 'UPI',
-      payer: body.payer || body.receiver || '',
-      reference: body.reference || '',
+      payment_method: body.paymentMethod || 'UPI',
+      party_name: body.payer || body.receiver || '',
+      reference_no: body.reference || '',
       notes: body.notes || '',
-      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     };
 
-    const docRef = await addDoc(collection(db, 'finances'), newTransaction);
+    const { data, error } = await supabase.from('finances').insert([newTransaction]).select();
+    if (error) throw error;
 
-    return NextResponse.json({ success: true, transaction: { id: docRef.id, ...newTransaction } });
+    return NextResponse.json({ success: true, transaction: data[0] });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
@@ -69,7 +71,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, message: 'Transaction ID required' }, { status: 400 });
     }
 
-    await deleteDoc(doc(db, 'finances', id));
+    const { error } = await supabase.from('finances').delete().eq('id', id);
+    if (error) throw error;
 
     return NextResponse.json({ success: true, message: 'Transaction deleted successfully' });
   } catch (error: any) {
