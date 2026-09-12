@@ -20,6 +20,13 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { FinancialTransaction, BudgetAllocation, PaymentMethod, TransactionType, DepartmentEvent } from '@/lib/types';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 const INCOME_CATEGORIES = [
   'College Grant',
@@ -85,14 +92,77 @@ export default function AdminFinancesPage() {
 
   const loadFinances = async () => {
     try {
-      const [finRes, evRes] = await Promise.all([
-        fetch('/api/finances'),
-        fetch('/api/events'),
-      ]);
-      const finData = await finRes.json();
-      const evData = await evRes.json();
-      if (finData.success) setFinancesData(finData);
-      if (evData.success) setEvents(evData.events || []);
+      // Fetch data directly from Supabase tables (or API routes if preferred)
+      const { data: txData, error: txError } = await supabase.from('finances').select('*').order('transaction_date', { ascending: false });
+      const { data: budgetData, error: budgetError } = await supabase.from('budgets').select('*');
+      const { data: evData, error: evError } = await supabase.from('events').select('*');
+
+      if (txError) console.error(txError);
+      if (budgetError) console.error(budgetError);
+
+      const transactions: FinancialTransaction[] = (txData || []).map((t: any) => ({
+        id: t.id,
+        type: t.transaction_type,
+        title: t.title,
+        amount: Number(t.amount),
+        date: t.transaction_date,
+        category: t.category,
+        paymentMethod: t.payment_method,
+        payerPayee: t.party_name,
+        receiptRef: t.reference_no,
+        notes: t.notes,
+        budgetId: t.budget_id,
+        eventId: t.event_id,
+      }));
+
+      const budgets: BudgetAllocation[] = (budgetData || []).map((b: any) => ({
+        id: b.id,
+        fiscalYear: b.fiscal_year,
+        title: b.title,
+        allocatedAmount: Number(b.allocated_amount),
+        spentAmount: Number(b.spent_amount || 0),
+        category: b.category,
+        notes: b.notes,
+      }));
+
+      // Calculate Summary metrics
+      let totalIncome = 0;
+      let totalExpense = 0;
+      let categoryBreakdown: Record<string, number> = {};
+      let incomeBreakdown: Record<string, number> = {};
+
+      transactions.forEach((tx) => {
+        if (tx.type === 'income') {
+          totalIncome += tx.amount;
+          incomeBreakdown[tx.category] = (incomeBreakdown[tx.category] || 0) + tx.amount;
+        } else {
+          totalExpense += tx.amount;
+          categoryBreakdown[tx.category] = (categoryBreakdown[tx.category] || 0) + tx.amount;
+        }
+      });
+
+      const netBalance = totalIncome - totalExpense;
+      const totalBudgetAllocated = budgets.reduce((acc, b) => acc + b.allocatedAmount, 0);
+      const totalBudgetSpent = budgets.reduce((acc, b) => acc + b.spentAmount, 0);
+      const utilizationPercentage = totalBudgetAllocated > 0 ? Math.round((totalBudgetSpent / totalBudgetAllocated) * 100) : 0;
+
+      setFinancesData({
+        success: true,
+        summary: {
+          totalIncome,
+          totalExpense,
+          netBalance,
+          totalBudgetAllocated,
+          totalBudgetSpent,
+          utilizationPercentage,
+          categoryBreakdown,
+          incomeBreakdown,
+        },
+        transactions,
+        budgets,
+      });
+
+      if (evData) setEvents(evData || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -129,26 +199,39 @@ export default function AdminFinancesPage() {
     }
 
     try {
-      const res = await fetch('/api/finances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          entityType: 'transaction',
-          ...txForm,
+      const { error } = await supabase.from('finances').insert([
+        {
+          transaction_type: txForm.type,
+          title: txForm.title,
           amount: parseFloat(txForm.amount),
-        }),
-      });
+          transaction_date: txForm.date,
+          category: txForm.category,
+          payment_method: txForm.paymentMethod,
+          party_name: txForm.payerPayee,
+          reference_no: txForm.receiptRef,
+          notes: txForm.notes,
+          budget_id: txForm.budgetId || null,
+          event_id: txForm.eventId || null,
+        },
+      ]);
 
-      const data = await res.json();
-      if (data.success) {
-        setIsTxModalOpen(false);
-        loadFinances();
-      } else {
-        alert(data.message || 'Error recording transaction');
+      if (error) throw error;
+
+      // If tied to a budget, update spent amount
+      if (txForm.type === 'expense' && txForm.budgetId) {
+        const targetBudget = budgets.find((b) => b.id === txForm.budgetId);
+        if (targetBudget) {
+          await supabase
+            .from('budgets')
+            .update({ spent_amount: targetBudget.spentAmount + parseFloat(txForm.amount) })
+            .eq('id', txForm.budgetId);
+        }
       }
-    } catch (err) {
-      alert('Failed to save transaction');
+
+      setIsTxModalOpen(false);
+      loadFinances();
+    } catch (err: any) {
+      alert('Failed to save transaction: ' + err.message);
     }
   };
 
@@ -160,69 +243,52 @@ export default function AdminFinancesPage() {
     }
 
     try {
-      const res = await fetch('/api/finances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          entityType: 'budget',
-          ...budgetForm,
-          allocatedAmount: parseFloat(budgetForm.allocatedAmount),
-        }),
-      });
+      const { error } = await supabase.from('budgets').insert([
+        {
+          fiscal_year: budgetForm.fiscalYear,
+          title: budgetForm.title,
+          allocated_amount: parseFloat(budgetForm.allocatedAmount),
+          spent_amount: 0,
+          category: budgetForm.category,
+          notes: budgetForm.notes,
+        },
+      ]);
 
-      const data = await res.json();
-      if (data.success) {
-        setIsBudgetModalOpen(false);
-        setBudgetForm({
-          fiscalYear: '2026-2027',
-          title: '',
-          allocatedAmount: '',
-          category: 'Event Specific',
-          notes: '',
-        });
-        loadFinances();
-      } else {
-        alert(data.message || 'Error setting up budget');
-      }
-    } catch (err) {
-      alert('Failed to save budget setup');
+      if (error) throw error;
+
+      setIsBudgetModalOpen(false);
+      setBudgetForm({
+        fiscalYear: '2026-2027',
+        title: '',
+        allocatedAmount: '',
+        category: 'Event Specific',
+        notes: '',
+      });
+      loadFinances();
+    } catch (err: any) {
+      alert('Failed to save budget setup: ' + err.message);
     }
   };
 
   const handleDeleteTx = async (id: string, title: string) => {
     if (!confirm(`Delete transaction "${title}"?`)) return;
     try {
-      const res = await fetch(`/api/finances?id=${id}&entityType=transaction`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (data.success) {
-        loadFinances();
-      } else {
-        alert(data.message || 'Error deleting transaction');
-      }
-    } catch (err) {
-      alert('Failed to delete transaction');
+      const { error } = await supabase.from('finances').delete().eq('id', id);
+      if (error) throw error;
+      loadFinances();
+    } catch (err: any) {
+      alert('Failed to delete transaction: ' + err.message);
     }
   };
 
   const handleDeleteBudget = async (id: string, title: string) => {
     if (!confirm(`Remove budget "${title}"?`)) return;
     try {
-      const res = await fetch(`/api/finances?id=${id}&entityType=budget`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (data.success) {
-        loadFinances();
-      } else {
-        alert(data.message || 'Error deleting budget');
-      }
-    } catch (err) {
-      alert('Failed to delete budget');
+      const { error } = await supabase.from('budgets').delete().eq('id', id);
+      if (error) throw error;
+      loadFinances();
+    } catch (err: any) {
+      alert('Failed to delete budget: ' + err.message);
     }
   };
 
