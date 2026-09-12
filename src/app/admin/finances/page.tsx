@@ -92,7 +92,6 @@ export default function AdminFinancesPage() {
 
   const loadFinances = async () => {
     try {
-      // Fetch data directly from Supabase tables (or API routes if preferred)
       const { data: txData, error: txError } = await supabase.from('finances').select('*').order('transaction_date', { ascending: false });
       const { data: budgetData, error: budgetError } = await supabase.from('budgets').select('*');
       const { data: evData, error: evError } = await supabase.from('events').select('*');
@@ -113,6 +112,8 @@ export default function AdminFinancesPage() {
         notes: t.notes,
         budgetId: t.budget_id,
         eventId: t.event_id,
+        status: t.status || 'completed',
+        createdAt: t.created_at || new Date().toISOString(),
       }));
 
       const budgets: BudgetAllocation[] = (budgetData || []).map((b: any) => ({
@@ -217,7 +218,6 @@ export default function AdminFinancesPage() {
 
       if (error) throw error;
 
-      // If tied to a budget, update spent amount
       if (txForm.type === 'expense' && txForm.budgetId) {
         const targetBudget = budgets.find((b) => b.id === txForm.budgetId);
         if (targetBudget) {
@@ -292,7 +292,6 @@ export default function AdminFinancesPage() {
     }
   };
 
-  // Export to CSV
   const handleExportCSV = () => {
     if (!financesData?.transactions) return;
     const headers = ['ID', 'Date', 'Type', 'Category', 'Title', 'Amount (INR)', 'Payment Method', 'Payer/Payee', 'Receipt Ref', 'Notes'];
@@ -319,7 +318,6 @@ export default function AdminFinancesPage() {
     document.body.removeChild(link);
   };
 
-  // Print Statement
   const handlePrint = () => {
     window.print();
   };
