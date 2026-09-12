@@ -1,0 +1,338 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 241, 245, 249;
+  --background-rgb: 0, 0, 0;
+
+  /* Light Theme Tokens: Crisp White + Royal/Cobalt Blue */
+  --lt-bg-page: #f8fafc;
+  --lt-bg-card: #ffffff;
+  --lt-bg-card-alt: #f1f5f9;
+  --lt-border: #e2e8f0;
+  --lt-border-accent: #93c5fd;
+  --lt-text-primary: #0f172a;
+  --lt-text-secondary: #475569;
+  --lt-blue-accent: #2563eb;
+}
+
+html {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background-color: #000000;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+/* Scrollable pill/tab rows on mobile without visible scrollbar */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* =========================================
+   DARK MODE BASELINE (Default)
+   ========================================= */
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #0f1f3d;
+  border-radius: 4px;
+  border: 1px solid #172b52;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #1d4ed8;
+}
+
+/* Dark cards & accents */
+.dark-blue-card {
+  background-color: #09101f;
+  border: 1px solid #142442;
+  border-radius: 0.875rem;
+}
+.dark-blue-card:hover {
+  border-color: #1d4ed8;
+}
+.text-dark-blue-accent {
+  color: #3b82f6;
+}
+
+/* =========================================
+   LIGHT THEME OVERRIDES
+   ========================================= */
+
+html.light body {
+  background-color: var(--lt-bg-page) !important;
+  color: var(--lt-text-primary) !important;
+}
+
+/* Base Page Backgrounds */
+html.light main.bg-black,
+html.light body.bg-black,
+html.light div.bg-black:not(.dark-blue-card) {
+  background-color: var(--lt-bg-page) !important;
+}
+html.light [class~="bg-black/95"],
+html.light [class~="bg-black/90"],
+html.light [class~="bg-black/80"],
+html.light [class~="bg-black/75"],
+html.light [class~="bg-black/50"] {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+/* Card Backgrounds */
+html.light [class~="bg-[#070d18]"],
+html.light [class~="bg-[#070e1b]"],
+html.light [class~="bg-[#08101e]"],
+html.light [class~="bg-[#0a1222]"],
+html.light [class~="bg-[#0a152b]"],
+html.light [class~="bg-[#0b162b]"],
+html.light [class~="bg-[#0c1628]"],
+html.light [class~="bg-[#0e1d38]"],
+html.light [class~="bg-[#0f1d35]"],
+html.light [class~="bg-[#0f2142]"],
+html.light .dark-blue-card {
+  background-color: var(--lt-bg-card) !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05) !important;
+}
+
+/* Hover States */
+html.light [class~="hover:bg-[#0a1426]"]:hover,
+html.light [class~="hover:bg-[#0c1628]"]:hover,
+html.light [class~="hover:bg-[#0c162a]"]:hover,
+html.light [class~="hover:bg-[#0c1830]"]:hover,
+html.light [class~="hover:bg-[#101d36]"]:hover,
+html.light [class~="hover:bg-[#122038]"]:hover,
+html.light [class~="hover:bg-[#122240]"]:hover,
+html.light .dark-blue-card:hover {
+  background-color: var(--lt-bg-card-alt) !important;
+}
+
+/* Borders */
+html.light [class*="border-[#0f1f3a]"],
+html.light [class*="border-[#121e33]"],
+html.light [class*="border-[#122038]"],
+html.light [class*="border-[#13223c]"],
+html.light [class*="border-[#14233c]"],
+html.light [class*="border-[#152540]"],
+html.light [class*="border-[#162744]"],
+html.light [class*="border-[#16294a]"],
+html.light [class*="border-[#172b50]"],
+html.light [class*="border-[#1b3156]"],
+html.light .dark-blue-card {
+  border-color: var(--lt-border) !important;
+}
+
+html.light [class*="border-[#1e3a8a]"],
+html.light [class*="border-[#1e3e78]"],
+html.light .dark-blue-card:hover {
+  border-color: var(--lt-border-accent) !important;
+}
+
+/* =========================================
+   GRADIENT CORRECTIONS (Clean Blue & White)
+   ========================================= */
+
+/* Hero & Section Gradients: Maps deep blues to clean sky/slate shades */
+html.light [class*="from-[#060c18]"],
+html.light [class*="from-[#070d18]"],
+html.light [class*="from-[#08101e]"],
+html.light [class*="from-black"] {
+  --tw-gradient-from: #eff6ff !important; /* Soft blue tint */
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(239, 246, 255, 0)) !important;
+}
+
+html.light [class*="via-[#03060c]"],
+html.light [class*="via-[#08101e]"],
+html.light [class*="via-black"] {
+  --tw-gradient-stops: var(--tw-gradient-from, #eff6ff), #ffffff, var(--tw-gradient-to, #f8fafc) !important;
+}
+
+html.light [class*="to-[#070e1b]"],
+html.light [class*="to-[#08101e]"],
+html.light [class*="to-[#0a152b]"],
+html.light [class*="to-[#0c1628]"],
+html.light [class*="to-black"] {
+  --tw-gradient-to: #f8fafc !important; /* Light slate finish */
+}
+
+/* =========================================
+   TEXT & ACCENTS
+   ========================================= */
+
+/* Dark texts for readability, but preserve white text on colored buttons */
+html.light [class~="text-white"]:not([class*="bg-blue"]):not([class*="bg-indigo"]):not(button):not(.btn) {
+  color: var(--lt-text-primary) !important;
+}
+
+/* Ensure buttons keep clean white text on solid blue backgrounds */
+html.light button[class*="bg-blue"],
+html.light a[class*="bg-blue"],
+html.light .btn-primary {
+  color: #ffffff !important;
+}
+
+html.light [class~="text-slate-100"],
+html.light [class~="text-slate-200"],
+html.light [class~="text-slate-300"],
+html.light [class~="text-slate-400"],
+html.light [class~="text-slate-500"] {
+  color: var(--lt-text-secondary) !important;
+}
+
+html.light .text-dark-blue-accent {
+  color: var(--lt-blue-accent) !important;
+}
+
+/* Forms & Inputs */
+html.light input,
+html.light textarea,
+html.light select {
+  background-color: var(--lt-bg-card) !important;
+  color: var(--lt-text-primary) !important;
+  border-color: var(--lt-border) !important;
+}
+html.light ::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Scrollbars */
+html.light ::-webkit-scrollbar-track {
+  background: var(--lt-bg-page) !important;
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+  border: 1px solid #94a3b8 !important;
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8 !important;
+}
+
+/* Smooth Transition (Scoped to avoid performance drops) */
+body, header, footer, main, section, nav, .dark-blue-card {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+/* =========================================
+   FIX OVERLAY GRADIENTS OVER IMAGES
+   ========================================= */
+
+/* Keep overlays on top of images transparent so the image stays visible */
+html.light .relative [class*="bg-gradient-to-t"],
+html.light .relative [class*="bg-gradient-to-b"],
+html.light [class*="from-black/"],
+html.light [class*="from-[#0"] {
+  --tw-gradient-from: transparent !important;
+  --tw-gradient-stops: transparent, transparent !important;
+}
+
+/* Or if the card image wrapper has a gradient overlay, clear it in light mode */
+html.light .dark-blue-card .relative > div[class*="bg-gradient"],
+html.light [class*="rounded"] > div[class*="bg-gradient-to-t"] {
+  background: transparent !important;
+}
+
+/* =========================================
+   FOOTER LIGHT THEME FIX
+   ========================================= */
+
+/* Force footer background to white */
+html.light footer,
+html.light footer[class*="bg-"],
+html.light [class*="border-t"] footer,
+html.light div:has(> footer) {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Fix footer text colors so they are readable on white */
+html.light footer,
+html.light footer [class*="text-slate-"],
+html.light footer [class*="text-gray-"],
+html.light footer p,
+html.light footer span,
+html.light footer li {
+  color: #475569 !important;
+}
+
+/* Footer main headings, links, and branding */
+html.light footer h1,
+html.light footer h2,
+html.light footer h3,
+html.light footer h4,
+html.light footer strong,
+html.light footer [class*="text-white"] {
+  color: #0f172a !important;
+}
+
+/* Footer links hover */
+html.light footer a:hover {
+  color: #2563eb !important;
+}
+
+/* Footer internal divider lines */
+html.light footer hr,
+html.light footer [class*="border-"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* =========================================
+   FORCE WHITE TEXT ON OVERLAYS & DATE BADGES
+   ========================================= */
+
+/* 1. Date badges & icons inside cards */
+html.light [class*="bg-black/"],
+html.light [class*="bg-[#0b162b]"],
+html.light [class*="bg-[#070d18]"],
+html.light [class*="bg-[#08101e]"] {
+  color: #ffffff !important;
+}
+
+html.light [class*="bg-black/"] *,
+html.light [class*="bg-[#0b162b]"] *,
+html.light [class*="bg-[#070d18]"] *,
+html.light [class*="bg-[#08101e]"] * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* 2. Text and labels overlaying Department Gallery images */
+html.light .group:has(img) span,
+html.light .group:has(img) p,
+html.light .group:has(img) h3,
+html.light .group:has(img) h4,
+html.light .relative:has(img) .absolute,
+html.light .relative:has(img) .absolute * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* =========================================
+   HIDE THEME TOGGLE BUTTON
+   ========================================= */
+header button:has(svg.lucide-sun),
+header button:has(svg.lucide-moon),
+nav button:has(svg.lucide-sun),
+nav button:has(svg.lucide-moon),
+button[aria-label*="theme" i],
+button[aria-label*="toggle" i] {
+  display: none !important;
+}
