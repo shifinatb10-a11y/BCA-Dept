@@ -72,6 +72,7 @@ export default function AdminGalleryPage() {
         description: item.description,
         featured: item.featured,
         date: new Date(item.created_at || Date.now()).toISOString().split('T')[0],
+        createdAt: item.created_at || new Date().toISOString(), // Added property to fix type error
       }));
 
       setGallery(formattedGallery);
