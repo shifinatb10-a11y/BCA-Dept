@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { createClient } from '@supabase/supabase-js';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 function checkAuth(request: Request): boolean {
   const cookieHeader = request.headers.get('cookie') || '';
@@ -12,14 +16,11 @@ function checkAuth(request: Request): boolean {
 
 export async function GET(request: Request) {
   try {
-    const querySnapshot = await getDocs(collection(db, 'gallery'));
-    const items = querySnapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
-    }));
+    const { data, error } = await supabase.from('gallery').select('*');
+    if (error) throw error;
 
-    // Sort by newest first
-    items.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    let items = data || [];
+    items.sort((a: any, b: any) => new Date(b.created_at || b.createdAt).getTime() - new Date(a.created_at || a.createdAt).getTime());
 
     return NextResponse.json({ success: true, items });
   } catch (error: any) {
@@ -37,18 +38,19 @@ export async function POST(request: Request) {
 
     const newItem = {
       title: body.title,
-      type: body.type || 'image', // 'image' or 'video'
+      type: body.type || 'image',
       category: body.category || 'Hackathons',
-      eventId: body.eventId || null,
+      event_id: body.eventId || null,
       url: body.url || body.imageUrl || '',
       description: body.description || '',
       featured: body.featured || false,
-      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     };
 
-    const docRef = await addDoc(collection(db, 'gallery'), newItem);
+    const { data, error } = await supabase.from('gallery').insert([newItem]).select();
+    if (error) throw error;
 
-    return NextResponse.json({ success: true, item: { id: docRef.id, ...newItem } });
+    return NextResponse.json({ success: true, item: data[0] });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
@@ -67,7 +69,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, message: 'Media ID required' }, { status: 400 });
     }
 
-    await deleteDoc(doc(db, 'gallery', id));
+    const { error } = await supabase.from('gallery').delete().eq('id', id);
+    if (error) throw error;
 
     return NextResponse.json({ success: true, message: 'Media deleted successfully' });
   } catch (error: any) {
