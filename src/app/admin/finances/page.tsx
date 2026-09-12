@@ -110,6 +110,7 @@ export default function AdminFinancesPage() {
         spentAmount: Number(b.spent_amount || 0),
         category: b.category,
         notes: b.notes,
+        createdAt: b.created_at || new Date().toISOString(),
       }));
 
       let totalIncome = 0;
