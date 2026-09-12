@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { createClient } from '@supabase/supabase-js';
 import { verifySessionToken, COOKIE_NAME } from '@/lib/auth';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 function checkAuth(request: Request): boolean {
   const cookieHeader = request.headers.get('cookie') || '';
@@ -17,18 +21,20 @@ export async function GET(request: Request) {
     const category = searchParams.get('category');
     const search = searchParams.get('search')?.toLowerCase();
 
-    const querySnapshot = await getDocs(collection(db, 'events'));
-    let events = querySnapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
-    }));
+    let query = supabase.from('events').select('*');
 
     if (status) {
-      events = events.filter((e: any) => e.status === status);
+      query = query.eq('status', status);
     }
     if (category && category !== 'All') {
-      events = events.filter((e: any) => e.category?.toLowerCase() === category.toLowerCase());
+      query = query.ilike('category', category);
     }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    let events = data || [];
+
     if (search) {
       events = events.filter(
         (e: any) =>
@@ -71,26 +77,26 @@ export async function POST(request: Request) {
       status: body.status || 'upcoming',
       coordinator: body.coordinator || 'BCA Faculty Coordinator',
       speaker: body.speaker || null,
-      speakerRole: body.speakerRole || null,
-      bannerUrl: body.bannerUrl || 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80',
-      registrationUrl: body.registrationUrl || null,
-      registrationFee: Number(body.registrationFee) || 0,
-      maxSeats: body.maxSeats ? Number(body.maxSeats) : null,
-      registeredCount: 0,
+      speaker_role: body.speakerRole || null,
+      banner_url: body.bannerUrl || 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80',
+      registration_url: body.registrationUrl || null,
+      registration_fee: Number(body.registrationFee) || 0,
+      max_seats: body.maxSeats ? Number(body.maxSeats) : null,
+      registered_count: 0,
       agenda: body.agenda || [],
       recap: body.recap || null,
-      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     };
 
-    const docRef = await addDoc(collection(db, 'events'), newEvent);
+    const { data, error } = await supabase.from('events').insert([newEvent]).select();
+    if (error) throw error;
 
-    return NextResponse.json({ success: true, event: { id: docRef.id, ...newEvent } });
+    return NextResponse.json({ success: true, event: data[0] });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-// ADDED PUT HANDLER TO FIX THE 405 ERROR
 export async function PUT(request: Request) {
   try {
     if (!checkAuth(request)) {
@@ -104,8 +110,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, message: 'Event ID required for update' }, { status: 400 });
     }
 
-    const eventRef = doc(db, 'events', id);
-    await updateDoc(eventRef, updateData);
+    const { error } = await supabase.from('events').update(updateData).eq('id', id);
+    if (error) throw error;
 
     return NextResponse.json({ success: true, message: 'Event updated successfully' });
   } catch (error: any) {
@@ -126,7 +132,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, message: 'Event ID required' }, { status: 400 });
     }
 
-    await deleteDoc(doc(db, 'events', id));
+    const { error } = await supabase.from('events').delete().eq('id', id);
+    if (error) throw error;
 
     return NextResponse.json({ success: true, message: 'Event deleted successfully' });
   } catch (error: any) {
